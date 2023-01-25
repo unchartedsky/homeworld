@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: macgyver
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: macgyver
+  template:
+    metadata:
+      labels:
+        app: macgyver
+    spec:
+      imagePullSecrets:
+      - name: github-andromedarabbit
+      containers:
+      - name: macgyver
+        image: ghcr.io/unchartedsky/macgyver:latest
+        imagePullPolicy: IfNotPresent
+        command: [ "/bin/bash", "-c", "--" ]
+        args: [ "while true; do sleep 30; done;" ]
+        resources:
+          requests:
+            cpu: 30m
+            memory: 32Mi
+          limits:
+            cpu: 1000m
+            memory: 512Mi

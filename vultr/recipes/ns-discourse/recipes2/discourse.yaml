@@ -1,0 +1,249 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: discourse
+  namespace: discourse
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 200m
+    nginx.ingress.kubernetes.io/proxy-buffer-size: 32k
+    # nginx.ingress.kubernetes.io/client-body-buffer-size: 64m
+    # nginx.ingress.kubernetes.io/server-snippet: |
+    #   set $agentflag 1;
+
+    #   if ($http_user_agent ~* "(Feedly)" ){
+    #     set $agentflag 1;
+    #   }
+
+    #   if ($http_user_agent ~* "(Feedbin)" ){
+    #     set $agentflag 1;
+    #   }
+
+    #   # if ($http_user_agent ~* "(Mozilla)" ){
+    #   #   set $agentflag 1;
+    #   # }
+
+    #   # if ($http_user_agent ~* "(Firefox)" ){
+    #   #   set $agentflag 1;
+    #   # }
+
+    #   if ($http_user_agent ~* "(Edg)" ){
+    #     set $agentflag 1;
+    #   }
+
+    #   if ( $agentflag = 0 ) {
+    #     return 403;
+    #   }
+
+    # See https://support.cloudflare.com/hc/en-us/articles/216537517-What-is-Content-Security-Policy-CSP-and-how-can-I-use-it-with-Cloudflare-
+    # nginx.ingress.kubernetes.io/configuration-snippet: |
+    #   more_set_headers "Content-Security-Policy: script-src 'self' ajax.cloudflare.com; script-src 'self' 'unsafe-inline'; script-src 'self' static.cloudflareinsights.com; script-src static.cloudflareinsights.com; connect-src cloudflareinsights.co;";
+    #   more_set_headers "Content-Security-Policy: script-src 'self' ajax.cloudflare.com";
+    #   more_set_headers "script-src 'self' 'unsafe-inline'";
+    #   more_set_headers "script-src 'self' static.cloudflareinsights.com";
+    #   more_set_headers "script-src static.cloudflareinsights.com; connect-src cloudflareinsights.co";
+
+    cert-manager.io/issuer: letsencrypt-prod
+
+    # For Cloudflare proxied entries, set the TTL annotation to 1 (automatic), or do not set it.
+    external-dns.alpha.kubernetes.io/ttl: "1"
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - unchartedsky.com
+        - discourse.unchartedsky.com
+        - dc.unchartedsky.com
+        - forum.unchartedsky.com
+      secretName: tls-discourse
+  rules:
+    - host: unchartedsky.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: discourse
+                port:
+                  number: 80
+    - host: discourse.unchartedsky.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: discourse
+                port:
+                  number: 80
+    - host: dc.unchartedsky.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: discourse
+                port:
+                  number: 80
+    - host: forum.unchartedsky.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: discourse
+                port:
+                  number: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: discourse
+  namespace: discourse
+  labels:
+    app: discourse
+  # annotations:
+  # service.beta.kubernetes.io/do-loadbalancer-protocol: "http"
+  # service.beta.kubernetes.io/do-loadbalancer-enable-proxy-protocol: "false"
+  # service.beta.kubernetes.io/do-loadbalancer-redirect-http-to-https: "true"
+  # external-dns.alpha.kubernetes.io/hostname: discourse.unchartedsky.com,forum.unchartedsky.com
+  # # For Cloudflare proxied entries, set the TTL annotation to 1 (automatic), or do not set it.
+  # external-dns.alpha.kubernetes.io/ttl: "1"
+  # external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+spec:
+  # type: NodePort
+  # type: LoadBalancer
+  # externalTrafficPolicy: "Local"
+  selector:
+    app: discourse
+  ports:
+    - port: 80
+      targetPort: 80
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: discourse
+  namespace: discourse
+  labels:
+    app: discourse
+spec:
+  storageClassName: vultr-block-storage-hdd-retain
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 40Gi
+  # selector:
+  #   matchLabels:
+  #     app: discourse
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discourse
+  namespace: discourse
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: discourse
+  template:
+    metadata:
+      labels:
+        app: discourse
+    spec:
+      serviceAccountName: discourse
+      initContainers:
+        - name: db-migrations
+          image: ghcr.io/unchartedsky/discourse:155bd20
+          # imagePullPolicy: Always
+          command:
+            - bash
+            - -c
+            - "(cd /var/www/discourse && bundle exec rake db:migrate) || true"
+          # - admin:create
+          envFrom:
+            - secretRef:
+                name: discourse
+          env:
+            - name: DISCOURSE_DB_USERNAME
+              value: discourse
+            - name: DISCOURSE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: postgres-password
+            - name: DISCOURSE_DB_HOST
+              value: postgresql
+            - name: DISCOURSE_DB_NAME
+              value: discourse
+            - name: DISCOURSE_DB_SOCKET
+              value: ""
+            - name: DISCOURSE_REDIS_HOST
+              value: redis
+            - name: DISCOURSE_REDIS_PORT
+              value: "6379"
+            - name: DISCOURSE_HOSTNAME
+              value: discourse.unchartedsky.com
+      containers:
+        - name: web
+          image: ghcr.io/unchartedsky/discourse:155bd20
+          # imagePullPolicy: IfNotPresent
+          command: ["/sbin/boot"]
+          ports:
+            - name: http
+              containerPort: 80
+          envFrom:
+            - secretRef:
+                name: discourse
+          env:
+            - name: DISCOURSE_DB_USERNAME
+              value: discourse
+            - name: DISCOURSE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: postgres-password
+            - name: DISCOURSE_DB_HOST
+              value: postgresql
+            - name: DISCOURSE_DB_NAME
+              value: discourse
+            - name: DISCOURSE_DB_SOCKET
+              value: ""
+            - name: DISCOURSE_REDIS_HOST
+              value: redis
+            - name: DISCOURSE_REDIS_PORT
+              value: "6379"
+            - name: DISCOURSE_HOSTNAME
+              value: discourse.unchartedsky.com
+          readinessProbe:
+            httpGet:
+              path: /srv/status
+              port: http
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+          # resources:
+          #   requests:
+          #     cpu: 30m
+          #     memory: 256Mi
+          #   limits:
+          #     cpu: 2000m
+          #     memory: 2Gi
+          volumeMounts:
+            - name: discourse-storage
+              mountPath: /shared
+            # - name: backups
+            #   mountPath: /var/www/discourse/public/backups
+      volumes:
+        - name: discourse-storage
+          persistentVolumeClaim:
+            claimName: discourse
+        # - name: backups
+        #   emptyDir: {}

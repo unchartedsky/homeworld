@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: discourse
+  namespace: discourse
+imagePullSecrets:
+  - name: github-andromedarabbit
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: discourse-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: discourse-role
+subjects:
+  - kind: ServiceAccount
+    name: discourse
+    namespace: discourse
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: discourse-role
+  namespace: discourse
+rules:
+  - apiGroups:
+      - extensions
+    resources:
+      - podsecuritypolicies
+    resourceNames:
+      - privileged
+    verbs:
+      - use
+  # - apiGroups:
+  #   - ""
+  #   resources:
+  #   - pods
+  #   verbs:
+  #   - patch
+  #   - update
+  #   - get
+  #   - list
+  #   - watch
