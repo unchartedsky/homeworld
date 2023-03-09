@@ -94,7 +94,7 @@ metadata:
 data:
   copy.sh: |
     #!/bin/bash -xe
-    export FEED_CREATOR_VERSION="2.2.1"
+    export FEED_CREATOR_VERSION="2.2.3"
 
     aws s3 --endpoint=https://sgp1.digitaloceanspaces.com cp "s3://team7/store/feed-creator-${FEED_CREATOR_VERSION}.zip" /tmp/
     cd /tmp
@@ -160,7 +160,7 @@ spec:
               mountPath: /scripts
       containers:
         - name: app
-          image: ghcr.io/unchartedsky/fulltextrss-base:latest
+          image: ghcr.io/unchartedsky/fulltextrss-base:00957490510ecc7abbcecca8a1ff94d36f9b1f42
           imagePullPolicy: Always
           ports:
             - containerPort: 80
